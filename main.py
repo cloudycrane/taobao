@@ -43,6 +43,7 @@ def item_thread(cate_queue, db_cate, db_item):
             db_cate.Put(cate, 'crawling')
             for item_page in itertools.count(1):
                 url = URL_BASE.format(quote_plus(cate), item_page)
+                print(url)
                 for tr in range(5):
                     try:
                         items_obj = json.loads(url_get(url))
@@ -51,7 +52,9 @@ def item_thread(cate_queue, db_cate, db_item):
                         quit()
                     except Exception as e:
                         if tr == 4: raise e
-                if len(items_obj['listItem']) == 0: break
+                #----jump out from loop-----#
+                # break when page is empty or
+                if len(items_obj['listItem']) == 0 or item_page > 1: break
                 for item in items_obj['listItem']:
                     item_obj = dict(
                         _id=int(item['itemNumId']),
@@ -64,7 +67,7 @@ def item_thread(cate_queue, db_cate, db_item):
                     db_item.Put(str(item_obj['_id']).encode('utf-8'),
                                 json.dumps(item_obj, ensure_ascii=False))
 
-                print('Get {} items from {}: {}'.format(len(items_obj['listItem']), cate, item_page))
+                print('Get {} items from {} on page {}'.format(len(items_obj['listItem']), cate, item_page))
 
                 if 'nav' in items_obj:
                     for na in items_obj['nav']['navCatList']:
@@ -73,7 +76,8 @@ def item_thread(cate_queue, db_cate, db_item):
                         except:
                             db_cate.Put(na['name'], 'waiting')
             db_cate.Put(cate, 'OK')
-            print(cate, 'OK')
+            print(cate.encode('utf-8'), 'OK')
+            break
         except KeyboardInterrupt:
             break
         except Exception as e:
@@ -100,7 +104,7 @@ if __name__ == '__main__':
 
     db_cate = leveldb.LevelDB('./taobao-cate')
     db_item = leveldb.LevelDB('./taobao-item')
-    orig_cate = 'ECOONER　熏衣草'
+    orig_cate = 'ECOONER 熏衣草'
     try:
         db_cate.Get(orig_cate)
     except:
@@ -112,3 +116,4 @@ if __name__ == '__main__':
     for item_t in item_th:
         item_t.start()
     cate_th.join()
+    print("end")
