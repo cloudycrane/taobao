@@ -1,4 +1,5 @@
-# encoding: utf-8
+# -*- coding: UTF-8 -*-
+import sys
 import time
 import leveldb
 from urllib import quote_plus
@@ -12,6 +13,7 @@ from threading import Thread
 
 URL_BASE = 'http://s.m.taobao.com/search?q={}&n=200&m=api4h5&style=list&page={}'
 
+
 def url_get(url):
     # print('GET ' + url)
     header = dict()
@@ -20,9 +22,10 @@ def url_get(url):
     header['Accept-Language'] = 'en-US,en;q=0.8'
     header['Connection'] = 'keep-alive'
     header['DNT'] = '1'
-    #header['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1500.71 Safari/537.36'
+    # header['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1500.71 Safari/537.36'
     header['User-Agent'] = 'Mozilla/12.0 (compatible; MSIE 8.0; Windows NT)'
-    return requests.get(url, timeout = 5, headers = header).text
+    return requests.get(url, timeout=5, headers=header).text
+
 
 def item_thread(cate_queue, db_cate, db_item):
     while True:
@@ -35,7 +38,7 @@ def item_thread(cate_queue, db_cate, db_item):
             except:
                 post_exist = False
             if post_exist == True:
-                print('cate-{}: {} already exists ... Ignore'.format(cate, title))
+                print('cate-{}: {} already exists ... Ignore'.format(cate, cate))
                 continue
             db_cate.Put(cate, 'crawling')
             for item_page in itertools.count(1):
@@ -51,15 +54,15 @@ def item_thread(cate_queue, db_cate, db_item):
                 if len(items_obj['listItem']) == 0: break
                 for item in items_obj['listItem']:
                     item_obj = dict(
-                        _id = int(item['itemNumId']),
-                        name = item['name'],
-                        price = float(item['price']),
-                        query = cate,
-                        category = int(item['category']) if item['category'] != '' else 0,
-                        nick = item['nick'],
-                        area = item['area'])
-                    db_item.Put(str(item_obj['_id']),
-                                json.dumps(item_obj, ensure_ascii = False))
+                        _id=int(item['itemNumId']),
+                        name=item['name'],
+                        price=float(item['price']),
+                        query=cate,
+                        # category = int(item['category']) if item['category'] != '' else 0,
+                        nick=item['nick'],
+                        area=item['area'])
+                    db_item.Put(str(item_obj['_id']).encode('utf-8'),
+                                json.dumps(item_obj, ensure_ascii=False))
 
                 print('Get {} items from {}: {}'.format(len(items_obj['listItem']), cate, item_page))
 
@@ -76,6 +79,7 @@ def item_thread(cate_queue, db_cate, db_item):
         except Exception as e:
             print('An {} exception occured'.format(e))
 
+
 def cate_thread(cate_queue, db_cate):
     while True:
         try:
@@ -89,18 +93,22 @@ def cate_thread(cate_queue, db_cate):
         except Exception as e:
             print('CateThread: {}'.format(e))
 
+
 if __name__ == '__main__':
+    reload(sys)
+    sys.setdefaultencoding('utf-8')
+
     db_cate = leveldb.LevelDB('./taobao-cate')
     db_item = leveldb.LevelDB('./taobao-item')
-    orig_cate = '正装'
+    orig_cate = 'ECOONER　熏衣草'
     try:
         db_cate.Get(orig_cate)
     except:
         db_cate.Put(orig_cate, 'waiting')
-    cate_queue = Queue(maxsize = 1000)
-    cate_th = Thread(target = cate_thread, args = (cate_queue, db_cate))
+    cate_queue = Queue(maxsize=1000)
+    cate_th = Thread(target=cate_thread, args=(cate_queue, db_cate))
     cate_th.start()
-    item_th = [Thread(target = item_thread, args = (cate_queue, db_cate, db_item)) for _ in range(5)]
+    item_th = [Thread(target=item_thread, args=(cate_queue, db_cate, db_item)) for _ in range(5)]
     for item_t in item_th:
         item_t.start()
     cate_th.join()
