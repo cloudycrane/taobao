@@ -11,8 +11,64 @@ import requests
 from Queue import Queue
 from threading import Thread
 
-URL_BASE = 'http://s.m.taobao.com/search?q={}&n=200&m=api4h5&style=list&page={}'
 
+def getCoupons(itemNumId):
+    exParams = {
+        "spm": "a230r.1.14.8.22fc51barOCtpH",
+        "id": itemNumId,
+        "ns": "1",
+        "abbucket": "7"
+    }
+    data = {
+        "itemNumId": itemNumId,
+        "exParams": json.dumps(exParams),
+        "detail_v": "3.1.1",
+        "ttid": "2018@taobao_iphone_9.9.9",
+        "utdid": "123123123123123"
+    }
+
+    data_part = quote_plus(json.dumps(data))
+    url = ('https://h5api.m.taobao.com/h5/mtop.taobao.detail.getdetail/6.0/?data=' + data_part).replace('+', '')
+    header = {}
+    response = requests.get(url, timeout=5, headers=header).json()
+
+    print response['data']
+    api = json.loads(response['data']['apiStack'][0]['value'])
+    if api['feature'].has_key('hasCoupon') and api['feature']['hasCoupon'] == 'true':
+        coupons_origin = api['resource']['coupon']['couponList']
+        key = 'title'
+    elif api['price'].has_key('shopProm'):
+        coupons_origin = api['price']['shopProm'][0]['content']
+        key = 'content'
+    else:
+        coupons_origin = []
+
+    coupons = []
+    if len(coupons_origin) == 0: return (coupons)
+
+    for coupon_origin in coupons_origin:
+        if key == 'title':
+            content = coupon_origin[key]
+        else:
+            content = coupon_origin
+
+        for sub_coupon in content.split(';'):
+            if '领津贴' in sub_coupon: continue
+
+            matchObj = re.match(".*满(\d+)(.{3}).*[减省](\d+).*", sub_coupon.encode('utf-8'))
+
+            if matchObj:
+                condition = matchObj.group(1)
+                unit = matchObj.group(2)
+                discount = matchObj.group(3)
+                coupon = {
+                    "condition": condition,
+                    "unit": unit,
+                    "discount": discount
+                }
+                coupons.append(coupon)
+
+    return (coupons)
 
 def url_get(url):
     # print('GET ' + url)
@@ -26,94 +82,50 @@ def url_get(url):
     header['User-Agent'] = 'Mozilla/12.0 (compatible; MSIE 8.0; Windows NT)'
     return requests.get(url, timeout=5, headers=header).text
 
+def getSearchResult(itemName):
+    URL_BASE = 'http://s.m.taobao.com/search?q={}&n=200&m=api4h5&style=list&page={}'
+    item_page = '1'
+    url = URL_BASE.format(quote_plus(item_name), item_page)
 
-def item_thread(cate_queue, db_cate, db_item):
-    while True:
+    search = []
+    for tr in range(5):
         try:
-            cate = cate_queue.get()
-            post_exist = True
-            try:
-                state = db_cate.Get(cate)
-                if state != 'OK': post_exist = False
-            except:
-                post_exist = False
-            if post_exist == True:
-                print('cate-{}: {} already exists ... Ignore'.format(cate, cate))
-                continue
-            db_cate.Put(cate, 'crawling')
-            for item_page in itertools.count(1):
-                url = URL_BASE.format(quote_plus(cate), item_page)
-                print(url)
-                for tr in range(5):
-                    try:
-                        items_obj = json.loads(url_get(url))
-                        break
-                    except KeyboardInterrupt:
-                        quit()
-                    except Exception as e:
-                        if tr == 4: raise e
-                #----jump out from loop-----#
-                # break when page is empty or
-                if len(items_obj['listItem']) == 0 or item_page > 1: break
-                for item in items_obj['listItem']:
-                    item_obj = dict(
-                        _id=int(item['itemNumId']),
-                        name=item['name'],
-                        price=float(item['price']),
-                        query=cate,
-                        # category = int(item['category']) if item['category'] != '' else 0,
-                        nick=item['nick'],
-                        area=item['area'])
-                    db_item.Put(str(item_obj['_id']).encode('utf-8'),
-                                json.dumps(item_obj, ensure_ascii=False))
-
-                print('Get {} items from {} on page {}'.format(len(items_obj['listItem']), cate, item_page))
-
-                if 'nav' in items_obj:
-                    for na in items_obj['nav']['navCatList']:
-                        try:
-                            db_cate.Get(na['name'])
-                        except:
-                            db_cate.Put(na['name'], 'waiting')
-            db_cate.Put(cate, 'OK')
-            print(cate.encode('utf-8'), 'OK')
+            items_obj = json.loads(url_get(url))
             break
         except KeyboardInterrupt:
-            break
+            quit()
         except Exception as e:
-            print('An {} exception occured'.format(e))
+            if tr == 4: raise e
 
+    if len(items_obj['listItem']) == 0:
+        print('no listItem')
 
-def cate_thread(cate_queue, db_cate):
-    while True:
-        try:
-            for key, value in db_cate.RangeIter():
-                if value != 'OK':
-                    print('CateThread: put {} into queue'.format(key))
-                    cate_queue.put(key)
-            time.sleep(10)
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            print('CateThread: {}'.format(e))
-
+    for item in items_obj['listItem']:
+        itemNumId = item['itemNumId']
+        coupons = getCoupons(item['itemNumId'])
+        if len(coupons) > 0:
+            hasCoupon = True
+        else:
+            hasCoupon = False
+        item_obj = dict(
+            itemNumId=int(item['itemNumId']),
+            userId=item['userId'],
+            name=item['name'],
+            nick=item['nick'],
+            price=float(item['price']),
+            coupons=coupons,
+            hasCoupon=hasCoupon
+        )
+        search.append(item_obj)
+    return(search)
 
 if __name__ == '__main__':
     reload(sys)
     sys.setdefaultencoding('utf-8')
 
-    db_cate = leveldb.LevelDB('./taobao-cate')
-    db_item = leveldb.LevelDB('./taobao-item')
-    orig_cate = 'ECOONER 熏衣草'
-    try:
-        db_cate.Get(orig_cate)
-    except:
-        db_cate.Put(orig_cate, 'waiting')
-    cate_queue = Queue(maxsize=1000)
-    cate_th = Thread(target=cate_thread, args=(cate_queue, db_cate))
-    cate_th.start()
-    item_th = [Thread(target=item_thread, args=(cate_queue, db_cate, db_item)) for _ in range(5)]
-    for item_t in item_th:
-        item_t.start()
-    cate_th.join()
-    print("end")
+    item_names = ['壹可医研杏仁酸','壹可医研弹力美肌水']
+    for item_name in item_names:
+        search = getSearchResult(item_name)
+        for s in search:
+            print s['userId']
+
