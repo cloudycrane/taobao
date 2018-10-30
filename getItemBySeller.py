@@ -2,16 +2,15 @@
 from urllib import quote_plus
 import urllib2
 import sys
-import re
 from lxml import etree
 
 def url_get(url):
     # print('GET ' + url)
     header = dict()
     header['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-    # header['Accept-Encoding'] = 'gzip,deflate,sdch'
-    # header['Accept-Language'] = 'en-US,en;q=0.8'
-    # header['Connection'] = 'keep-alive'
+    header['Accept-Encoding'] = 'gzip,deflate,sdch'
+    header['Accept-Language'] = 'en-US,en;q=0.8'
+    header['Connection'] = 'keep-alive'
     header['DNT'] = '1'
     request = urllib2.Request(url, headers=header)
     response = urllib2.urlopen(request)
@@ -31,17 +30,14 @@ def getSellerByName(seller):
     tree = etree.HTML(html, parser=etree.HTMLParser(encoding='utf-8'))
     tables = tree.xpath('//div[@class="detail"]/table')
 
-    if len(tables) == 0: return -1
+    if len(tables) == 0: return 0
 
     res = dict()
     for i, table in enumerate(tables):
-        #if i == 0: continue
-
-        link = table.xpath('./tr/td[@class="pic"]/a')[0].attrib.get('href')
-        img = table.xpath('./tr/td[@class="pic"]/a/img')[0].attrib
+        if i == 0: continue
+        img = table.xpath('//tr/td[@class="pic"]/a/img')[0].attrib
         products = table.xpath('./tr/td[@valign="middle"]/a/text()')[0]
         res[i] = {
-            "id": re.findall('.*shop_id=(\d*).*', link)[0],
             "icon_url": img.get('src'),
             "name": img.get('alt'),
             "products": products
@@ -50,6 +46,6 @@ def getSellerByName(seller):
 
 
 if __name__ == '__main__':
-    seller = 'ECOONER旗舰店'
-    #seller = 'ECOONER'
+    #seller = 'ECOONER旗舰店'
+    seller = 'ECOONER'
     print getSellerByName(seller)
