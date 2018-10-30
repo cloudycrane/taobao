@@ -2,50 +2,63 @@
 from urllib import quote_plus
 import urllib2
 import sys
-from lxml import etree
+import json
 
 def url_get(url):
-    # print('GET ' + url)
-    header = dict()
-    header['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-    header['Accept-Encoding'] = 'gzip,deflate,sdch'
-    header['Accept-Language'] = 'en-US,en;q=0.8'
-    header['Connection'] = 'keep-alive'
-    header['DNT'] = '1'
-    request = urllib2.Request(url, headers=header)
+    headers = {
+        'Accept':'application/json, text/plain, */*',
+        'Accept-Language':'zh-CN,zh;q=0.3',
+        'Referer':'https://item.taobao.com/item.htm',
+        'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
+        'Connection':'keep-alive',
+    }
+    request = urllib2.Request(url, headers=headers)
     response = urllib2.urlopen(request)
-    header['User-Agent'] = 'Mozilla/12.0 (compatible; MSIE 8.0; Windows NT)'
     return response.read().decode('utf-8')
 
+def getItemBySeller(shopId):
+    item_page = '1'
+    result = dict()
+    i = 1
+    while True:
+        URL_BASE = 'http://api.s.m.taobao.com/search.json?m=shopitemsearch&shopId={}&n=40&page={}'
+        url = URL_BASE.format(quote_plus(shopId), item_page)
+        for tr in range(5):
+            try:
+                items_obj = json.loads(url_get(url))
+                break
+            except KeyboardInterrupt:
+                quit()
+            except Exception as e:
+                if tr == 4: raise e
 
-def getSellerByName(seller):
-    reload(sys)
-    sys.setdefaultencoding('utf-8')
+        if len(items_obj['itemsArray']) == 0:
+            print('no listItem')
+            break
 
-    URL_BASE = 'https://shop.m.taobao.com/shop/shop_search.htm?q={}'
-    url = URL_BASE.format(quote_plus(seller))
+        for item in items_obj['itemsArray']:
+            result[i] = {
+                'id': item['item_id'],
+                'title': item['title'],
+                'price': item['price'],
+                'priceWithRate': item['priceWithRate'],
+                'isprepay': int(item['isprepay']) if item.has_key('isprepay') else 0,
+                'type': item['type'],
+                'sold': item['sold'],
+                'quantity': item['quantity'],
+                'pic_path': item['pic_path']
+            }
+            i += 1
 
-    html = url_get(url)
+        if int(items_obj['totalPage']) > int(item_page):
+            item_page = str(int(item_page) + 1)
+        else:
+            break
 
-    tree = etree.HTML(html, parser=etree.HTMLParser(encoding='utf-8'))
-    tables = tree.xpath('//div[@class="detail"]/table')
+    return(result)
 
-    if len(tables) == 0: return 0
-
-    res = dict()
-    for i, table in enumerate(tables):
-        if i == 0: continue
-        img = table.xpath('//tr/td[@class="pic"]/a/img')[0].attrib
-        products = table.xpath('./tr/td[@valign="middle"]/a/text()')[0]
-        res[i] = {
-            "icon_url": img.get('src'),
-            "name": img.get('alt'),
-            "products": products
-        }
-    return(res)
 
 
 if __name__ == '__main__':
-    #seller = 'ECOONER旗舰店'
-    seller = 'ECOONER'
-    print getSellerByName(seller)
+    shopId = '192173170'
+    print getItemBySeller(shopId)

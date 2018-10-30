@@ -13,9 +13,10 @@ def url_get(url):
     # header['Accept-Language'] = 'en-US,en;q=0.8'
     # header['Connection'] = 'keep-alive'
     header['DNT'] = '1'
+    header['User-Agent'] = 'Mozilla/12.0 (compatible; MSIE 8.0; Windows NT)'
     request = urllib2.Request(url, headers=header)
     response = urllib2.urlopen(request)
-    header['User-Agent'] = 'Mozilla/12.0 (compatible; MSIE 8.0; Windows NT)'
+
     return response.read().decode('utf-8')
 
 
