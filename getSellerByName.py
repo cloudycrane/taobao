@@ -3,7 +3,7 @@ from urllib import quote_plus
 import urllib2
 import sys
 import re
-from lxml import etree
+from BeautifulSoup import BeautifulSoup
 
 def url_get(url):
     # print('GET ' + url)
@@ -29,8 +29,8 @@ def getSellerByName(seller):
 
     html = url_get(url)
 
-    tree = etree.HTML(html, parser=etree.HTMLParser(encoding='utf-8'))
-    tables = tree.xpath('//div[@class="detail"]/table')
+    soup = BeautifulSoup(html)
+    tables = soup.findAll('div', attrs={'class':'detail'})
 
     if len(tables) == 0: return -1
 
